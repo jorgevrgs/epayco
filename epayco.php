@@ -28,9 +28,25 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
+use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
+
 class Epayco extends PaymentModule
 {
     protected $config_form = false;
+    const FRANCHISE = [
+        'AM' => 'Amex',
+        'BA' => 'Baloto',
+        'CR' => 'Credencial',
+        'DC' => 'Diners Club',
+        'EF' => 'Efecty',
+        'GA' => 'Gana',
+        'PR' => 'Punto Red',
+        'RS' => 'Red Servi',
+        'MC' => 'Mastercard',
+        'PSE' => 'PSE',
+        'SP' => 'SafetyPay',
+        'VS' => 'Visa',
+    ];
 
     public function __construct()
     {
@@ -52,9 +68,9 @@ class Epayco extends PaymentModule
 
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall ePayco module?');
 
-        $this->limited_countries = array('FR');
+        $this->limited_countries = array('CO');
 
-        $this->limited_currencies = array('EUR');
+        $this->limited_currencies = array('COP', 'USD');
 
         $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
     }
@@ -92,7 +108,8 @@ class Epayco extends PaymentModule
             $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('displayPayment') &&
             $this->registerHook('displayPaymentReturn') &&
-            $this->registerHook('displayPaymentTop');
+            $this->registerHook('displayPaymentTop') &&
+            $this->registerHook('paymentOptions');
     }
 
     public function uninstall()
@@ -185,15 +202,38 @@ class Epayco extends PaymentModule
                     array(
                         'col' => 3,
                         'type' => 'text',
-                        'prefix' => '<i class="icon icon-envelope"></i>',
-                        'desc' => $this->l('Enter a valid email address'),
-                        'name' => 'EPAYCO_ACCOUNT_EMAIL',
-                        'label' => $this->l('Email'),
+                        //'prefix' => '<i class="icon icon-envelope"></i>',
+                        'desc' => $this->l('Open "Integraciones" --> "Llaves API" and search "Llaves secretas"'),
+                        'name' => 'EPAYCO_PUBLIC_KEY',
+                        'label' => $this->l('Public Key'),
                     ),
                     array(
-                        'type' => 'password',
-                        'name' => 'EPAYCO_ACCOUNT_PASSWORD',
-                        'label' => $this->l('Password'),
+                        'col' => 3,
+                        'type' => 'text',
+                        //'prefix' => '<i class="icon icon-envelope"></i>',
+                        'desc' => $this->l('Open "Integraciones" --> "Llaves API" and search "Llaves secretas"'),
+                        'name' => 'EPAYCO_PRIVATE_KEY',
+                        'label' => $this->l('Private Key'),
+                    ),
+                    array(
+                        'type' => 'switch',
+                        'label' => $this->l('OnPage Checkout'),
+                        'name' => 'EPAYCO_ONPAGE_CHECKOUT',
+                        'is_bool' => true,
+                        'desc' => $this->l('If you set No, you will use standard redirect payment process,
+                        else, set Yes to use Onpage Checkout'),
+                        'values' => array(
+                            array(
+                                'id' => 'active_on',
+                                'value' => true,
+                                'label' => $this->l('Enabled')
+                            ),
+                            array(
+                                'id' => 'active_off',
+                                'value' => false,
+                                'label' => $this->l('Disabled')
+                            )
+                        ),
                     ),
                 ),
                 'submit' => array(
@@ -209,9 +249,10 @@ class Epayco extends PaymentModule
     protected function getConfigFormValues()
     {
         return array(
-            'EPAYCO_LIVE_MODE' => Configuration::get('EPAYCO_LIVE_MODE', true),
-            'EPAYCO_ACCOUNT_EMAIL' => Configuration::get('EPAYCO_ACCOUNT_EMAIL', 'contact@prestashop.com'),
-            'EPAYCO_ACCOUNT_PASSWORD' => Configuration::get('EPAYCO_ACCOUNT_PASSWORD', null),
+            'EPAYCO_LIVE_MODE' => Configuration::get('EPAYCO_LIVE_MODE', false),
+            'EPAYCO_PUBLIC_KEY' => Configuration::get('EPAYCO_PUBLIC_KEY', null),
+            'EPAYCO_PRIVATE_KEY' => Configuration::get('EPAYCO_PRIVATE_KEY', null),
+            'EPAYCO_ONPAGE_CHECKOUT' => Configuration::get('EPAYCO_ONPAGE_CHECKOUT', true),
         );
     }
 
@@ -251,6 +292,7 @@ class Epayco extends PaymentModule
      * This method is used to render the payment button,
      * Take care if the button should be displayed or not.
      */
+    /*
     public function hookPayment($params)
     {
         $currency_id = $params['cart']->id_currency;
@@ -263,6 +305,7 @@ class Epayco extends PaymentModule
 
         return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
     }
+    */
 
     /**
      * This hook is used to display the order confirmation page.
@@ -310,5 +353,159 @@ class Epayco extends PaymentModule
     public function hookDisplayPaymentTop()
     {
         /* Place your code here. */
+    }
+
+    public function hookPaymentOptions($params)
+    {
+        if (!$this->active
+        || !(Configuration::get('EPAYCO_LIVE_MODE'))
+        || !$this->checkCurrency($params['cart'])) {
+            return;
+        }
+
+        if (Configuration::get('EPAYCO_ONPAGE_CHECKOUT')) {
+            $payment_options = [
+                $this->getEmbeddedPaymentOption(),
+            ];
+        } else {
+            $payment_options = [
+                $this->getExternalPaymentOption(),
+            ];
+        }
+
+        return $payment_options;
+    }
+
+    /**
+     * @param array $params [
+     *   'x_cust_id_cliente',
+     *   'x_key',
+     *   'x_ref_payco',
+     *   'x_transaction_id',
+     *   'x_amount',
+     *   'x_currency_code',
+     * ]
+     */
+    public function getSignature($params) : string
+    {
+        if (!is_array($params)
+        && empty($params)) {
+            return false;
+        }
+
+        $count = count($params);
+        $data = '';
+        for ($i = 0; $i < $count; $i++) {
+            if ($params[$i + 1]) {
+                $data .= $params[$i].'^';
+            } else {
+                $data .= $params[$i];
+            }
+        }
+
+        return hash('sha256', $data);
+    }
+
+    /**
+     * @param int $code
+     *
+     * x_cod_transaction_state - x_transaction_state
+     * 1	Aceptada
+     * 2	Rechazada
+     * 3	Pendiente
+     * 4	Fallida
+     * 6	Reversada
+     * 7	Retenida
+     * 8	Iniciada
+     * 9	Exprirada
+     * 10	Abandonada
+     * 11	Cancelada
+     * 12	Antifraude
+     *
+     */
+    public function getOrderStatusId($code) : int
+    {
+        switch $code {
+            case 1:
+                $idOrderStatus = Configuration::get('PS_OS_PAYMENT');
+                break;
+
+            case 9:
+            case 10:
+            case 11:
+                $idOrderStatus = Configuration::get('PS_OS_CANCELED');
+                break;
+
+            case 3:
+            case 8:
+                $idOrderStatus = Configuration::get('PS_OS_WS_PAYMENT');
+                break;
+
+            case 6:
+                $idOrderStatus = Configuration::get('PS_OS_REFUND');
+                break;
+
+            case 2:
+            case 4:
+            case 7:
+            case 12:
+            default:
+                $idOrderStatus = Configuration::get('PS_OS_ERROR');
+        };
+
+        return $idOrderStatus;
+    }
+
+    /**
+     * Use for OnPage Checkout
+     */
+    public function getEmbeddedPaymentOption()
+    {
+        $embeddedOption = new PaymentOption();
+        $embeddedOption
+            ->setCallToActionText($this->l('ePayco'))
+            ->setAction($this->context->link->getModuleLink($this->name, 'confirmation', array(), true))
+            ->setInputs([
+                'external' => [
+                    'name' => 'external',
+                    'type' => 'hidden',
+                    'value' => true,
+                ],
+            ])
+            ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/logo.png'));
+
+        return $externalOption;
+    }
+
+    /**
+     * Use for Standard Checkout
+     */
+    public function getExternalPaymentOption()
+    {
+        $externalOption = new PaymentOption();
+        $externalOption
+            ->setCallToActionText($this->l('ePayco'))
+            ->setAction($this->context->link->getModuleLink($this->name, 'confirmation', array(), true))
+            ->setInputs([
+                'external' => [
+                    'name' => 'external',
+                    'type' => 'hidden',
+                    'value' => false,
+                ],
+            ])
+            ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/logo.png'));
+
+        return $externalOption;
+    }
+
+    public function checkCurrency(Cart $cart)
+    {
+        $currency_cart = new Currency($cart->id_currency);
+
+        if (in_array($currency_cart->iso_code, $this->limited_currencies)) {
+            return true;
+        }
+
+        return false;
     }
 }
