@@ -395,8 +395,8 @@ class Epayco extends PaymentModule
 
         $count = count($params);
         $data = '';
-        for ($i = 0; $i < $count; $i++) {
-            if ($params[$i + 1]) {
+        for ($i = 0; $i < $count - 1; $i++) {
+            if (!empty($params[$i + 1])) {
                 $data .= $params[$i].'^';
             } else {
                 $data .= $params[$i];
