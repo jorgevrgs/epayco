@@ -23,23 +23,41 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
+{extends "$layout"}
+
+{block name="content"}
 <div>
-	<h3>{l s='Redirect your customer' mod='epayco'}:</h3>
+	<h3>{l s='ePayco Payment' mod='epayco'}:</h3>
 	<ul class="alert alert-info">
-			<li>{l s='This action should be used to redirect your customer to the website of your payment processor' mod='epayco'}.</li>
+		<li>{l s='Payment will be processed for Epayco.' mod='epayco'}.</li>
 	</ul>
 	
-	<div class="alert alert-warning">
-		{l s='You can redirect your customer with an error message' mod='epayco'}:
-		<a href="{$link->getModuleLink('epayco', 'redirect', ['action' => 'error'], true)|escape:'htmlall':'UTF-8'}" title="{l s='Look at the error' mod='epayco'}">
-			<strong>{l s='Look at the error message' mod='epayco'}</strong>
-		</a>
-	</div>
-	
-	<div class="alert alert-success">
-		{l s='You can also redirect your customer to the confirmation page' mod='epayco'}:
-		<a href="{$link->getModuleLink('epayco', 'confirmation', ['cart_id' => $cart_id, 'secure_key' => $secure_key], true)|escape:'htmlall':'UTF-8'}" title="{l s='Confirm' mod='epayco'}">
-			<strong>{l s='Go to the confirmation page' mod='epayco'}</strong>
-		</a>
-	</div>
+  <div>
+    <form>
+      <script
+        src="https://checkout.epayco.co/checkout.js"
+        class="epayco-button"
+      	{foreach from=$epayco_form key=key item=value}
+      		data-epayco-{$key}="{$value}"
+      	{/foreach}
+      >
+      </script>
+    </form>
+  </div>
 </div>
+{/block}
+
+{*block name='javascript_bottom'}
+  <script type="text/javascript">
+    var handler = ePayco.checkout.configure({
+			key: epayco_public_key,
+			test: epayco_test,
+		});
+    var data={
+    	{foreach from=$epayco_form key=key item=value}
+    		{$key}:"{$value}",
+    	{/foreach}
+    };
+    handler.open(data);
+  </script>
+{/block*}

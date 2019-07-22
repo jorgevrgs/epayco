@@ -25,60 +25,71 @@
 */
 class EpaycoValidationModuleFrontController extends ModuleFrontController
 {
-    /**
-     * This class should be use by your Instant Payment
-     * Notification system to validate the order remotely
-     */
     public function postProcess()
     {
-        /*
-         * If the module is not active anymore, no need to process anything.
-         */
-        if ($this->module->active == false) {
-            die;
-        }
+        if (Tools::getIsset('cart_id')
+        && (Tools::getIsset('secure_key'))) {
+            // Validate order
+            $cart_id = Tools::getValue('cart_id');
+            $secure_key = Tools::getValue('secure_key');
 
-        /**
-         * Since it is an example, we choose sample data,
-         * You'll have to get the correct values :)
-         */
-        $cart_id = 1;
-        $customer_id = 1;
-        $amount = 100.00;
-
-        /*
-         * Restore the context from the $cart_id & the $customer_id to process the validation properly.
-         */
-        Context::getContext()->cart = new Cart((int) $cart_id);
-        Context::getContext()->customer = new Customer((int) $customer_id);
-        Context::getContext()->currency = new Currency((int) Context::getContext()->cart->id_currency);
-        Context::getContext()->language = new Language((int) Context::getContext()->customer->id_lang);
-
-        $secure_key = Context::getContext()->customer->secure_key;
-
-        if ($this->isValidOrder() === true) {
-            $payment_status = Configuration::get('PS_OS_PAYMENT');
-            $message = null;
-        } else {
-            $payment_status = Configuration::get('PS_OS_ERROR');
+            $cart = new Cart((int) $cart_id);
+            $customer = new Customer((int) $cart->id_customer);
 
             /**
-             * Add a message to explain why the order has not been validated
+             * Since it's an example we are validating the order right here,
+             * You should not do it this way in your own module.
              */
-            $message = $this->module->l('An error occurred while processing payment');
+            $payment_status = Configuration::get('EPAYCO_OS_PENDING'); // Default value for a payment that succeed.
+            $message = null; // You can add a comment directly into the order so the merchant will see it in the BO.
+
+            /**
+             * Converting cart into a valid order
+             */
+            $module_name = $this->module->displayName;
+            $currency_id = (int) Context::getContext()->currency->id;
+
+            $this->module->validateOrder(
+                $cart_id,
+                $payment_status,
+                0.00,
+                $module_name,
+                $message,
+                array(),
+                $currency_id,
+                false,
+                $secure_key
+            );
+
+            $order_id = Order::getOrderByCartId((int) $cart->id);
+
+            if ($order_id && ($secure_key == $customer->secure_key)) {
+                /**
+                 * The order has been placed so we redirect the customer on the confirmation page.
+                 */
+                //$module_id = $this->module->id;
+
+                Tools::redirect(
+                    $this->context->link->getModuleLink(
+                        $this->module->name,
+                        'payment',
+                        [
+                            'order_id' => $order_id,
+                            'secure_key' => $secure_key,
+                        ],
+                        true
+                    )
+                );
+            } else {
+                /*
+                 * An error occured and is shown on a new page.
+                 */
+                $this->errors[] = $this->module->l('An error occured. Please contact the merchant to have more informations');
+            }
+        } else {
+            $this->errors[] = $this->module->l('There are missing parameters to validate cart.');
         }
 
-        $module_name = $this->module->displayName;
-        $currency_id = (int) Context::getContext()->currency->id;
-
-        return $this->module->validateOrder($cart_id, $payment_status, $amount, $module_name, $message, array(), $currency_id, false, $secure_key);
-    }
-
-    protected function isValidOrder()
-    {
-        /*
-         * Add your checks right there
-         */
-        return true;
+        return $this->setTemplate('error.tpl');
     }
 }

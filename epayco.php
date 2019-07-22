@@ -55,10 +55,7 @@ class Epayco extends PaymentModule
         $this->version = '0.0.1';
         $this->author = 'Jorge Vargas';
         $this->need_instance = 1;
-
-        /**
-         * Set $this->bootstrap to true if your module is compliant with bootstrap (PrestaShop 1.6)
-         */
+        $this->controllers = array('confirmation', 'validation', 'update');
         $this->bootstrap = true;
 
         parent::__construct();
@@ -69,7 +66,6 @@ class Epayco extends PaymentModule
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall ePayco module?');
 
         $this->limited_countries = array('CO');
-
         $this->limited_currencies = array('COP', 'USD');
 
         $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
@@ -81,29 +77,26 @@ class Epayco extends PaymentModule
      */
     public function install()
     {
-        if (extension_loaded('curl') == false)
-        {
+        if (extension_loaded('curl') == false) {
             $this->_errors[] = $this->l('You have to enable the cURL extension on your server to install this module');
             return false;
         }
 
         $iso_code = Country::getIsoById(Configuration::get('PS_COUNTRY_DEFAULT'));
 
-        if (in_array($iso_code, $this->limited_countries) == false)
-        {
+        if (in_array($iso_code, $this->limited_countries) == false) {
             $this->_errors[] = $this->l('This module is not available in your country');
             return false;
         }
 
         Configuration::updateValue('EPAYCO_LIVE_MODE', false);
 
-        include(dirname(__FILE__).'/sql/install.php');
+        //include(dirname(__FILE__).'/sql/install.php');
+        $this->installOrderState();
 
         return parent::install() &&
-            $this->registerHook('header') &&
-            $this->registerHook('backOfficeHeader') &&
-            $this->registerHook('payment') &&
-            $this->registerHook('paymentReturn') &&
+            $this->registerHook('displayHeader') &&
+            $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('actionPaymentCCAdd') &&
             $this->registerHook('actionPaymentConfirmation') &&
             $this->registerHook('displayPayment') &&
@@ -112,13 +105,54 @@ class Epayco extends PaymentModule
             $this->registerHook('paymentOptions');
     }
 
+    public function installOrderState()
+    {
+        if (!Configuration::get('EPAYCO_OS_PENDING')) {
+            $order_state = new OrderState();
+    		$order_state->name = array();
+    		foreach (Language::getLanguages() as $language) {
+                $order_state->name[$language['id_lang']] = 'ePayco Awaiting Payment';
+    		}
+
+    		$order_state->send_email = false;
+    		$order_state->color = '#FEFF64';
+    		$order_state->hidden = false;
+    		$order_state->delivery = false;
+    		$order_state->logable = false;
+    		$order_state->invoice = false;
+
+            if ($order_state->add()) {
+                Configuration::updateValue('EPAYCO_OS_PENDING', (int)$order_state->id);
+                $epaycoOs = Configuration::get('EPAYCO_OS_PENDING');
+                Tools::copy(
+                    $this->getLocalPath().'views/img/payment_icon.gif',
+                    _PS_IMG_DIR_.'os/'.(int)$epaycoOs.'.gif'
+                );
+            } else {
+                $this->errors[] = $this->l('Error when trying to add new order state');
+            }
+        }
+
+        return true;
+    }
+
     public function uninstall()
     {
         Configuration::deleteByName('EPAYCO_LIVE_MODE');
 
-        include(dirname(__FILE__).'/sql/uninstall.php');
+        //include(dirname(__FILE__).'/sql/uninstall.php');
+        $this->uninstallOrderState();
 
         return parent::uninstall();
+    }
+
+    public function uninstallOrderState()
+    {
+        $orderState = new OrderState(Configuration::get('EPAYCO_OS_PENDING'));
+        $orderState->delete();
+        Configuration::deleteByName('EPAYCO_OS_PENDING');
+
+        return true;
     }
 
     /**
@@ -203,6 +237,14 @@ class Epayco extends PaymentModule
                         'col' => 3,
                         'type' => 'text',
                         //'prefix' => '<i class="icon icon-envelope"></i>',
+                        'desc' => $this->l('You can find it at the top right of the page in your admin account.'),
+                        'name' => 'EPAYCO_CLIENT_ID',
+                        'label' => $this->l('Client Id'),
+                    ),
+                    array(
+                        'col' => 3,
+                        'type' => 'text',
+                        //'prefix' => '<i class="icon icon-envelope"></i>',
                         'desc' => $this->l('Open "Integraciones" --> "Llaves API" and search "Llaves secretas"'),
                         'name' => 'EPAYCO_PUBLIC_KEY',
                         'label' => $this->l('Public Key'),
@@ -250,6 +292,7 @@ class Epayco extends PaymentModule
     {
         return array(
             'EPAYCO_LIVE_MODE' => Configuration::get('EPAYCO_LIVE_MODE', false),
+            'EPAYCO_CLIENT_ID' => Configuration::get('EPAYCO_CLIENT_ID', false),
             'EPAYCO_PUBLIC_KEY' => Configuration::get('EPAYCO_PUBLIC_KEY', null),
             'EPAYCO_PRIVATE_KEY' => Configuration::get('EPAYCO_PRIVATE_KEY', null),
             'EPAYCO_ONPAGE_CHECKOUT' => Configuration::get('EPAYCO_ONPAGE_CHECKOUT', true),
@@ -271,7 +314,7 @@ class Epayco extends PaymentModule
     /**
     * Add the CSS & JavaScript files you want to be loaded in the BO.
     */
-    public function hookBackOfficeHeader()
+    public function hookDisplayBackOfficeHeader()
     {
         if (Tools::getValue('module_name') == $this->name) {
             $this->context->controller->addJS($this->_path.'views/js/back.js');
@@ -282,7 +325,7 @@ class Epayco extends PaymentModule
     /**
      * Add the CSS & JavaScript files you want to be added on the FO.
      */
-    public function hookHeader()
+    public function hookDisplayHeader()
     {
         $this->context->controller->addJS($this->_path.'/views/js/front.js');
         $this->context->controller->addCSS($this->_path.'/views/css/front.css');
@@ -310,21 +353,40 @@ class Epayco extends PaymentModule
     /**
      * This hook is used to display the order confirmation page.
      */
-    public function hookPaymentReturn($params)
+    public function hookDisplayPaymentReturn($params)
     {
-        if ($this->active == false)
+        if ($this->active == false
+        || Tools::getValue('id_module') != $this->id) {
             return;
+        }
 
-        $order = $params['objOrder'];
+        $order = $params['order'];
 
-        if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR'))
+        if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR')) {
             $this->smarty->assign('status', 'ok');
+        }
+
+        if (Tools::getIsset('ref_payco')) {
+            $epayco = Tools::file_get_contents('https://secure.epayco.co/validation/v1/reference/'.
+            Tools::getValue('ref_payco'));
+            $epayco = json_decode($epayco, true);
+
+            if ($epayco && !empty($epayco['data'])) {
+                $this->processPayment($epayco['data']);
+                $this->smarty->assign(array(
+                    'epayco' => $epayco,
+                ));
+            } else {
+                $this->_errors[] = $this->l('Error when processing ref_payco response');
+            }
+        }
 
         $this->smarty->assign(array(
             'id_order' => $order->id,
             'reference' => $order->reference,
             'params' => $params,
-            'total' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+            'total' => Tools::displayPrice($order->getTotalPaid(), new Currency($order->id_currency), false),
+            'errors' => $this->_errors,
         ));
 
         return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
@@ -340,38 +402,28 @@ class Epayco extends PaymentModule
         /* Place your code here. */
     }
 
+    /*
     public function hookDisplayPayment()
     {
-        /* Place your code here. */
+        // TODO
     }
-
-    public function hookDisplayPaymentReturn()
-    {
-        /* Place your code here. */
-    }
+    */
 
     public function hookDisplayPaymentTop()
     {
-        /* Place your code here. */
+        // echo 'hookDisplayPaymentTop';
     }
 
     public function hookPaymentOptions($params)
     {
         if (!$this->active
-        || !(Configuration::get('EPAYCO_LIVE_MODE'))
         || !$this->checkCurrency($params['cart'])) {
             return;
         }
 
-        if (Configuration::get('EPAYCO_ONPAGE_CHECKOUT')) {
-            $payment_options = [
-                $this->getEmbeddedPaymentOption(),
-            ];
-        } else {
-            $payment_options = [
-                $this->getExternalPaymentOption(),
-            ];
-        }
+        $payment_options = [
+            $this->getExternalPaymentOption(),
+        ];
 
         return $payment_options;
     }
@@ -393,17 +445,132 @@ class Epayco extends PaymentModule
             return false;
         }
 
-        $count = count($params);
-        $data = '';
-        for ($i = 0; $i < $count - 1; $i++) {
-            if (!empty($params[$i + 1])) {
-                $data .= $params[$i].'^';
-            } else {
-                $data .= $params[$i];
+        $data = implode('^', $params);
+
+        Logger::AddLog('epayco cleaned string: '.$data);
+
+        return hash('sha256', $data);
+    }
+
+    /**
+     * @param array $params
+     */
+    public function processPayment(array $params)
+    {
+        $neededVars = [
+            // Understand transaction response
+            'x_cod_response',
+            'x_response',
+            'x_response_reason_text',
+            // Response code
+            'x_cod_transaction_state',
+            'x_transaction_state',
+            // Signature
+            'x_signature',
+            'x_cust_id_cliente',
+            'x_ref_payco',
+            'x_transaction_id',
+            'x_amount',
+            'x_currency_code',
+            // Invoice
+            'x_id_invoice',
+            'x_extra1',
+            'x_extra2',
+        ];
+
+        $epaycoVars = [];
+        foreach ($_POST as $key => $value) {
+            if (Tools::strpos($key, 'x_') == 0) {
+                $epaycoVars[$key] = pSQL($value);
             }
         }
 
-        return hash('sha256', $data);
+        if (!count($epaycoVars)
+        && count($params)) {
+            $epaycoVars = $params;
+        } else {
+            throw new PrestaShopException($this->l('There are not exist vars needed to process the payment'));
+        }
+
+        foreach ($neededVars as $neededVar) {
+            if (!array_key_exists($neededVar, $epaycoVars)) {
+                throw new PrestaShopException(sprintf(
+                    $this->l('Missing var needed to update payment info %s'),
+                    $neededVar
+                ));
+            }
+        }
+
+        Logger::AddLog('ePayco: '.json_encode($epaycoVars), 1, null, 'ePayco', $epaycoVars['x_ref_payco']);
+
+        $signature = $this->getSignature([
+            $epaycoVars['x_cust_id_cliente'],
+            Configuration::get('EPAYCO_PRIVATE_KEY'),
+            $epaycoVars['x_ref_payco'],
+            $epaycoVars['x_transaction_id'],
+            $epaycoVars['x_amount'],
+            $epaycoVars['x_currency_code'],
+        ]);
+
+        if ($signature != $epaycoVars['x_signature']) {
+            throw new PrestaShopException(sprintf(
+                $this->l('Error when trying to validate signature local %s && received %s'),
+                $signature,
+                $epaycoVars['x_signature']
+            ));
+        }
+
+        $order_id = (int) $epaycoVars['x_id_invoice'];
+        $order = new Order($order_id);
+        if (!Validate::isLoadedObject($order)) {
+            throw new PrestaShopException(sprintf($this->l('Error when trying to upload Order %d'), $order_id));
+        }
+
+        $customer = new Customer($order->id_customer);
+        if (!Validate::isLoadedObject($customer)) {
+            throw new PrestaShopException(sprintf($this->l('Error when trying to upload Customer %d'), $order->id_customer));
+        }
+
+        return $this->updateOrderTransaction($epaycoVars, $order);
+    }
+
+    /**
+     * @param array $transaction
+     * @param Order $order
+     */
+    public function updateOrderTransaction(array $transaction, Order $order)
+    {
+        $idOrderState = (int) self::getOrderStatusId($transaction['x_cod_response']);
+        // Update total paid
+        if (!empty($transaction['x_amount_ok'])) {
+            $currencyId = Currency::getIdByIsoCode($transaction['x_currency_code']);
+            $currency = new Currency($currencyId);
+
+            $totalPaidOrder = $order->getTotalPaid($currency);
+            $amountPaid = $transaction['x_amount_ok'];
+
+            if (($totalPaidOrder < $amountPaid
+            || $totalPaidOrder == 0)
+            && $idOrderState == Configuration::get('PS_OS_PAYMENT')) {
+                $order->addOrderPayment(
+                    $amountPaid,
+                    $this->displayName,
+                    $transaction['x_ref_payco'],
+                    $currency,
+                    date('Y-m-d H:i:s', strtotime($transaction['x_transaction_date']))
+                );
+            }
+        }
+
+        // Update order state
+        if (!empty($transaction['x_cod_response'])) {
+            if ($idOrderState != $order->getCurrentState()
+            && !$order->hasBeenPaid()) {
+                $order->setCurrentState($idOrderState);
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -423,9 +590,9 @@ class Epayco extends PaymentModule
      * 12	Antifraude
      *
      */
-    public function getOrderStatusId($code) : int
+    public static function getOrderStatusId($code) : int
     {
-        switch $code {
+        switch ($code) {
             case 1:
                 $idOrderStatus = Configuration::get('PS_OS_PAYMENT');
                 break;
@@ -456,44 +623,31 @@ class Epayco extends PaymentModule
         return $idOrderStatus;
     }
 
-    /**
-     * Use for OnPage Checkout
-     */
-    public function getEmbeddedPaymentOption()
-    {
-        $embeddedOption = new PaymentOption();
-        $embeddedOption
-            ->setCallToActionText($this->l('ePayco'))
-            ->setAction($this->context->link->getModuleLink($this->name, 'confirmation', array(), true))
-            ->setInputs([
-                'external' => [
-                    'name' => 'external',
-                    'type' => 'hidden',
-                    'value' => true,
-                ],
-            ])
-            ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/logo.png'));
-
-        return $externalOption;
-    }
-
-    /**
-     * Use for Standard Checkout
-     */
     public function getExternalPaymentOption()
     {
         $externalOption = new PaymentOption();
         $externalOption
-            ->setCallToActionText($this->l('ePayco'))
-            ->setAction($this->context->link->getModuleLink($this->name, 'confirmation', array(), true))
+            //->setCallToActionText($this->l('ePayco'))
+            // TODO dynamic show title or not
+            ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
             ->setInputs([
-                'external' => [
-                    'name' => 'external',
+                'cart_id' => [
+                    'name' => 'cart_id',
                     'type' => 'hidden',
-                    'value' => false,
+                    'value' => (int) $this->context->cart->id,
+                ],
+                'secure_key' => [
+                    'name' => 'secure_key',
+                    'type' => 'hidden',
+                    'value' => $this->context->customer->secure_key,
                 ],
             ])
-            ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/logo.png'));
+            ->setAdditionalInformation(
+                $this->context->smarty->fetch('module:epayco/views/templates/hook/information.tpl')
+            )
+            ->setLogo('https://369969691f476073508a-60bf0867add971908d4f26a64519c2aa.ssl.cf5.rackcdn.com/btns/epayco/boton_de_cobro_epayco.png');
+            //->setLogo(Media::getMediaPath($this->getPathUri().'/logo.png'));
+            // TODO dynamic image
 
         return $externalOption;
     }
