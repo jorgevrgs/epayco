@@ -23,20 +23,30 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
-{if (isset($status) == true) && ($status == 'ok')}
-{*<h3>{l s='Your order on %s is complete.' sprintf=$shop_name mod='epayco'}</h3>*}
+{debug}
+
+<h3>{l s='Your order was received by us.' mod='epayco'}</h3>
+<p class="alert alert-info">{l s='Please, check payment details and order state below.' mod='epayco'}<p>
+<table class="table">
+  <tr>
+    <td>{l s='Amount Paid' mod='epayco'}</td>
+    <td>{$total}</td>
+  </tr>
+  <tr>
+    <td>{l s='Reference' mod='epayco'}</td>
+    <td>{$reference}</td>
+  </tr>
+  <tr>
+    <td>{l s='Status:' mod='epayco'}</td>
+    <td>{$status}</td>
+  </tr>
+</table>
+
 <p>
-	<br />- {l s='Amount' mod='epayco'} : <span class="price"><strong>{$total|escape:'htmlall':'UTF-8'}</strong></span>
-	<br />- {l s='Reference' mod='epayco'} : <span class="reference"><strong>{$reference|escape:'html':'UTF-8'}</strong></span>
-	<br /><br />{l s='An email has been sent with this information.' mod='epayco'}
-	<br /><br />{l s='If you have questions, comments or concerns, please contact our' mod='epayco'} <a href="{$link->getPageLink('contact', true)|escape:'html':'UTF-8'}">{l s='expert customer support team.' mod='epayco'}</a>
+	{l s='An email has been sent with this information.' mod='epayco'}
+	<br /><br />{l s='If you have questions, comments or concerns, please contact our' mod='epayco'}
+  <a href="{url entity=contact}">
+    {l s='expert customer support team.' mod='epayco'}
+  </a>
 </p>
-{else}
-<h3>{l s='Your order on %s has not been accepted.' sprintf=$shop_name mod='epayco'}</h3>
-<p>
-	<br />- {l s='Reference' mod='epayco'} <span class="reference"> <strong>{$reference|escape:'html':'UTF-8'}</strong></span>
-	<br /><br />{l s='Please, try to order again.' mod='epayco'}
-	<br /><br />{l s='If you have questions, comments or concerns, please contact our' mod='epayco'} <a href="{$link->getPageLink('contact', true)|escape:'html':'UTF-8'}">{l s='expert customer support team.' mod='epayco'}</a>
-</p>
-{/if}
 <hr />

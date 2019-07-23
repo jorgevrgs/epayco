@@ -362,10 +362,6 @@ class Epayco extends PaymentModule
 
         $order = $params['order'];
 
-        if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR')) {
-            $this->smarty->assign('status', 'ok');
-        }
-
         if (Tools::getIsset('ref_payco')) {
             $epayco = Tools::file_get_contents('https://secure.epayco.co/validation/v1/reference/'.
             Tools::getValue('ref_payco'));
@@ -379,7 +375,11 @@ class Epayco extends PaymentModule
             } else {
                 $this->_errors[] = $this->l('Error when processing ref_payco response');
             }
+        } else {
+            $order->setCurrentState(Configuration::get('PS_OS_CANCELED'));
         }
+
+        $orderState = new OrderState($order->getCurrentOrderState()->id, $this->context->language->id);
 
         $this->smarty->assign(array(
             'id_order' => $order->id,
@@ -387,6 +387,7 @@ class Epayco extends PaymentModule
             'params' => $params,
             'total' => Tools::displayPrice($order->getTotalPaid(), new Currency($order->id_currency), false),
             'errors' => $this->_errors,
+            'status' => $orderState->name,
         ));
 
         return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
