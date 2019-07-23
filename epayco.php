@@ -47,6 +47,7 @@ class Epayco extends PaymentModule
         'SP' => 'SafetyPay',
         'VS' => 'Visa',
     ];
+    public $epaycoResponse;
 
     public function __construct()
     {
@@ -69,6 +70,44 @@ class Epayco extends PaymentModule
         $this->limited_currencies = array('COP', 'USD');
 
         $this->ps_versions_compliancy = array('min' => '1.7', 'max' => _PS_VERSION_);
+        $this->epaycoResponse = [
+            'x_ref_payco' => $this->l('Payco Reference'),
+            //'x_id_invoice' => $this->l('Id Invoice'),
+            //'x_description' => $this->l('Description'),
+            'x_amount' => $this->l('Amount'),
+            //'x_amount_country' => $this->l('Amount Country'),
+            //'x_amount_ok' => $this->l('Amount OK'),
+            'x_tax' => $this->l('Tax'),
+            'x_amount_base' => $this->l('Amount Base'),
+            'x_currency_code' => $this->l('Currency Code'),
+            'x_bank_name' => $this->l('Bank Name'),
+            'x_cardnumber' => $this->l('Card Number'),
+            'x_quotas' => $this->l('Quotas'),
+            'x_response' => $this->l('Response'),
+            'x_approval_code' => $this->l('Approval Code'),
+            //'x_transaction_id' => $this->l('Transaction ID'),
+            'x_transaction_date' => $this->l('Date'),
+            //'x_cod_response' => $this->l('Code Response'),
+            'x_response_reason_text' => $this->l('Response Reason Text'),
+            'x_cod_transaction_state' => $this->l('Code Transaction State'),
+            'x_transaction_state' => $this->l('Transaction State'),
+            'x_errorcode' => $this->l('Error Code'),
+            'x_franchise' => $this->l('Franchise'),
+            'x_business' => $this->l('Business'),
+            //'x_customer_doctype' => $this->l('Customer Doc Type'),
+            //'x_customer_document' => $this->l('Customer Doc'),
+            //'x_customer_name' => $this->l('Customer First Name'),
+            //'x_customer_lastname' => $this->l('Customer Last Name'),
+            //'x_customer_email' => $this->l('Customer Email'),
+            //'x_customer_phone' => $this->l('Customer Phone'),
+            //'x_customer_movil' => $this->l('Customer Mobile'),
+            //'x_customer_country' => $this->l('Customer Country'),
+            //'x_customer_city' => $this->l('Customer City'),
+            //'x_customer_address' => $this->l('Customer Address'),
+            //'x_customer_ip' => $this->l('Customer IP'),
+            'x_test_request' => $this->l('Test Request'),
+            'x_type_payment' => $this->l('Type Payment'),
+        ];
     }
 
     /**
@@ -99,6 +138,7 @@ class Epayco extends PaymentModule
             $this->registerHook('displayBackOfficeHeader') &&
             $this->registerHook('actionPaymentCCAdd') &&
             $this->registerHook('actionPaymentConfirmation') &&
+            $this->registerHook('actionOrderStatusPostUpdate') &&
             $this->registerHook('displayPayment') &&
             $this->registerHook('displayPaymentReturn') &&
             $this->registerHook('displayPaymentTop') &&
@@ -361,17 +401,13 @@ class Epayco extends PaymentModule
         }
 
         $order = $params['order'];
+        $epayco = [];
 
         if (Tools::getIsset('ref_payco')) {
-            $epayco = Tools::file_get_contents('https://secure.epayco.co/validation/v1/reference/'.
-            Tools::getValue('ref_payco'));
-            $epayco = json_decode($epayco, true);
+            $response = $this->getPaycoResponse(Tools::getValue('ref_payco'));
 
-            if ($epayco && !empty($epayco['data'])) {
-                $this->processPayment($epayco['data']);
-                $this->smarty->assign(array(
-                    'epayco' => $epayco,
-                ));
+            if (!empty($response['data'])) {
+                $this->processPayment($response['data']);
             } else {
                 $this->_errors[] = $this->l('Error when processing ref_payco response');
             }
@@ -381,16 +417,34 @@ class Epayco extends PaymentModule
 
         $orderState = new OrderState($order->getCurrentOrderState()->id, $this->context->language->id);
 
-        $this->smarty->assign(array(
-            'id_order' => $order->id,
-            'reference' => $order->reference,
-            'params' => $params,
-            'total' => Tools::displayPrice($order->getTotalPaid(), new Currency($order->id_currency), false),
-            'errors' => $this->_errors,
-            'status' => $orderState->name,
-        ));
+        $this->smarty->assign([
+            'epayco' => [
+                'id_order' => $order->id,
+                'reference' => $order->reference,
+                'total' => Tools::displayPrice($order->getTotalPaid(), new Currency($order->id_currency), false),
+                'errors' => $this->_errors,
+                'status' => $orderState->name,
+                'lang' => $this->epaycoResponse,
+                'data' => !empty($response['data']) ? $response['data'] : [],
+                'franchise' => self::FRANCHISE,
+            ],
+        ]);
 
         return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
+    }
+
+    /**
+     * @param string $ref_payco
+     */
+    protected function getPaycoResponse($ref_payco)
+    {
+        $return = Tools::file_get_contents('https://secure.epayco.co/validation/v1/reference/'.$ref_payco);
+
+        if (false === $return) {
+            return false;
+        }
+
+        return json_decode($return, true);
     }
 
     public function hookActionPaymentCCAdd()
@@ -398,9 +452,38 @@ class Epayco extends PaymentModule
         /* Place your code here. */
     }
 
-    public function hookActionPaymentConfirmation()
+    /**
+     * @param array $params [
+     *   @var int 'id_order'
+     * ]
+     */
+    public function hookActionPaymentConfirmation($params)
     {
         /* Place your code here. */
+    }
+
+    /**
+     * @param array $params [
+     *   @var OrderState $newOrderStatus
+     *   @var int $id_order
+     * ]
+     */
+    public function hookActionOrderStatusPostUpdate($params)
+    {
+        $orderState = $params['newOrderStatus'];
+        $response = $this->getPaycoResponse(Tools::getValue('ref_payco'));
+
+        if (Tools::getIsset('ref_payco') &&
+        !empty($response['data'])) {
+            $transaction = $response['data'];
+            $orderState->transaction_id = $transaction['x_ref_payco'];
+            $orderState->card_number = $transaction['x_cardnumber'];
+            $orderState->card_brand = !empty(self::FRANCHISE[$transaction['x_franchise']])
+                ? self::FRANCHISE[$transaction['x_franchise']]
+                : $transaction['x_franchise'];
+            $orderState->card_holder = $transaction['x_franchise'];
+            $orderState->update();
+        }
     }
 
     /*
@@ -542,7 +625,16 @@ class Epayco extends PaymentModule
     public function updateOrderTransaction(array $transaction, Order $order)
     {
         $idOrderState = (int) self::getOrderStatusId($transaction['x_cod_response']);
+
+        // Update order state
+        if (!empty($transaction['x_cod_response'])
+        && $idOrderState != $order->getCurrentState()
+        && !$order->hasBeenPaid()) {
+            $order->setCurrentState($idOrderState);
+        }
+
         // Update total paid
+        /*
         if (!empty($transaction['x_amount_ok'])) {
             $currencyId = Currency::getIdByIsoCode($transaction['x_currency_code']);
             $currency = new Currency($currencyId);
@@ -556,20 +648,13 @@ class Epayco extends PaymentModule
                 $order->addOrderPayment(
                     $amountPaid,
                     $this->displayName,
-                    $transaction['x_ref_payco'],
+                    Tools::getValue('ref_payco'),//$transaction['x_ref_payco'],
                     $currency,
                     date('Y-m-d H:i:s', strtotime($transaction['x_transaction_date']))
                 );
             }
         }
-
-        // Update order state
-        if (!empty($transaction['x_cod_response'])) {
-            if ($idOrderState != $order->getCurrentState()
-            && !$order->hasBeenPaid()) {
-                $order->setCurrentState($idOrderState);
-            }
-        }
+        */
 
         return true;
     }
@@ -606,7 +691,7 @@ class Epayco extends PaymentModule
 
             case 3:
             case 8:
-                $idOrderStatus = Configuration::get('PS_OS_WS_PAYMENT');
+                $idOrderStatus = Configuration::get('EPAYCO_OS_PENDING');
                 break;
 
             case 6:

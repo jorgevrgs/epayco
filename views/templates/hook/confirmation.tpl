@@ -30,17 +30,40 @@
 <table class="table">
   <tr>
     <td>{l s='Amount Paid' mod='epayco'}</td>
-    <td>{$total}</td>
+    <td>{$epayco.total}</td>
   </tr>
   <tr>
     <td>{l s='Reference' mod='epayco'}</td>
-    <td>{$reference}</td>
+    <td>{$epayco.reference}</td>
   </tr>
   <tr>
     <td>{l s='Status:' mod='epayco'}</td>
-    <td>{$status}</td>
+    <td>{$epayco.status}</td>
   </tr>
 </table>
+
+<hr />
+
+{if isset($epayco.data)}
+<table class="table">
+  {foreach $epayco.data as $key => $value}
+    {if isset($epayco.lang[$key])}
+      <tr>
+        <td>
+          {$epayco.lang[$key]}
+        </td>
+        <td>
+          {if $key == 'x_franchise' && isset($epayco.franchise[$value])}
+            {$epayco.franchise[$value]}
+          {else}
+            {$value}
+          {/if}
+        </td>
+      </tr>
+    {/if}
+  {/foreach}
+</table>
+{/if}
 
 <p>
 	{l s='An email has been sent with this information.' mod='epayco'}
