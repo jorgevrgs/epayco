@@ -513,12 +513,12 @@ class Epayco extends PaymentModule
 
     /**
      * @param array $params [
-     *   'x_cust_id_cliente',
-     *   'x_key',
-     *   'x_ref_payco',
-     *   'x_transaction_id',
-     *   'x_amount',
-     *   'x_currency_code',
+     *   @var 'x_cust_id_cliente',
+     *   @var 'x_key',
+     *   @var 'x_ref_payco',
+     *   @var 'x_transaction_id',
+     *   @var 'x_amount',
+     *   @var 'x_currency_code',
      * ]
      */
     public function getSignature($params) : string
@@ -529,8 +529,6 @@ class Epayco extends PaymentModule
         }
 
         $data = implode('^', $params);
-
-        Logger::AddLog('epayco cleaned string: '.$data);
 
         return hash('sha256', $data);
     }
@@ -584,8 +582,6 @@ class Epayco extends PaymentModule
             }
         }
 
-        Logger::AddLog('ePayco: '.json_encode($epaycoVars), 1, null, 'ePayco', $epaycoVars['x_ref_payco']);
-
         $signature = $this->getSignature([
             $epaycoVars['x_cust_id_cliente'],
             Configuration::get('EPAYCO_PRIVATE_KEY'),
@@ -631,29 +627,6 @@ class Epayco extends PaymentModule
         && !$order->hasBeenPaid()) {
             $order->setCurrentState($idOrderState);
         }
-
-        // Update total paid
-        /*
-        if (!empty($transaction['x_amount_ok'])) {
-            $currencyId = Currency::getIdByIsoCode($transaction['x_currency_code']);
-            $currency = new Currency($currencyId);
-
-            $totalPaidOrder = $order->getTotalPaid($currency);
-            $amountPaid = $transaction['x_amount_ok'];
-
-            if (($totalPaidOrder < $amountPaid
-            || $totalPaidOrder == 0)
-            && $idOrderState == Configuration::get('PS_OS_PAYMENT')) {
-                $order->addOrderPayment(
-                    $amountPaid,
-                    $this->displayName,
-                    Tools::getValue('ref_payco'),//$transaction['x_ref_payco'],
-                    $currency,
-                    date('Y-m-d H:i:s', strtotime($transaction['x_transaction_date']))
-                );
-            }
-        }
-        */
 
         return true;
     }
