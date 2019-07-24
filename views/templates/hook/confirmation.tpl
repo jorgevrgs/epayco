@@ -23,8 +23,6 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
-{debug}
-
 <h3>{l s='Your order was received by us.' mod='epayco'}</h3>
 <p class="alert alert-info">{l s='Please, check payment details and order state below.' mod='epayco'}<p>
 <table class="table">
