@@ -23,7 +23,7 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
-{extends "$layout"}
+{extends file="$layout"}
 
 {block name="content"}
 <div>
@@ -31,7 +31,6 @@
 	<ul class="alert alert-info">
 		<li>{l s='Payment will be processed by Epayco.' mod='epayco'}.</li>
 	</ul>
-	
   <div>
     <form>
       <script
@@ -50,13 +49,4 @@
   {l s='Cancel' mod='epayco'}
 </a>
   
-{/block}
-
-{block name='javascript_bottom'}
-  {$smarty.block.parent}
-  <script type="text/javascript">
-    $('#closeModal').on('click', function (e) {
-      console.log('Closed window!');
-    });
-  </script>
 {/block}

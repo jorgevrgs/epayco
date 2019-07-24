@@ -56,7 +56,7 @@ class Epayco extends PaymentModule
         $this->version = '0.0.1';
         $this->author = 'Jorge Vargas';
         $this->need_instance = 1;
-        $this->controllers = array('confirmation', 'validation', 'update');
+        $this->controllers = array('payment', 'validation', 'update');
         $this->bootstrap = true;
 
         parent::__construct();
@@ -155,7 +155,7 @@ class Epayco extends PaymentModule
     		}
 
     		$order_state->send_email = false;
-    		$order_state->color = '#FEFF64';
+    		$order_state->color = '#d5a933';
     		$order_state->hidden = false;
     		$order_state->delivery = false;
     		$order_state->logable = false;
@@ -317,6 +317,15 @@ class Epayco extends PaymentModule
                             )
                         ),
                     ),
+                    array(
+                        //'col' => 3,
+                        'type' => 'textarea',
+                        //'prefix' => '<i class="icon icon-envelope"></i>',
+                        'desc' => $this->l('Show help information to customer before payment methods list.'),
+                        'name' => 'EPAYCO_PAYMENT_TOP',
+                        'label' => $this->l('Payment Top Message'),
+                        'autoload_rte' => true,
+                    ),
                 ),
                 'submit' => array(
                     'title' => $this->l('Save'),
@@ -336,6 +345,7 @@ class Epayco extends PaymentModule
             'EPAYCO_PUBLIC_KEY' => Configuration::get('EPAYCO_PUBLIC_KEY', null),
             'EPAYCO_PRIVATE_KEY' => Configuration::get('EPAYCO_PRIVATE_KEY', null),
             'EPAYCO_ONPAGE_CHECKOUT' => Configuration::get('EPAYCO_ONPAGE_CHECKOUT', true),
+            'EPAYCO_PAYMENT_TOP' => Configuration::get('EPAYCO_PAYMENT_TOP', ''),
         );
     }
 
@@ -347,8 +357,12 @@ class Epayco extends PaymentModule
         $form_values = $this->getConfigFormValues();
 
         foreach (array_keys($form_values) as $key) {
-            Configuration::updateValue($key, Tools::getValue($key));
+            if ($key != 'EPAYCO_PAYMENT_TOP') {
+                Configuration::updateValue($key, Tools::getValue($key));
+            }
         }
+
+        Configuration::updateValue('EPAYCO_PAYMENT_TOP', Tools::getValue($key), true);
     }
 
     /**
@@ -370,25 +384,6 @@ class Epayco extends PaymentModule
         $this->context->controller->addJS($this->_path.'/views/js/front.js');
         $this->context->controller->addCSS($this->_path.'/views/css/front.css');
     }
-
-    /**
-     * This method is used to render the payment button,
-     * Take care if the button should be displayed or not.
-     */
-    /*
-    public function hookPayment($params)
-    {
-        $currency_id = $params['cart']->id_currency;
-        $currency = new Currency((int)$currency_id);
-
-        if (in_array($currency->iso_code, $this->limited_currencies) == false)
-            return false;
-
-        $this->smarty->assign('module_dir', $this->_path);
-
-        return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
-    }
-    */
 
     /**
      * This hook is used to display the order confirmation page.
@@ -495,7 +490,11 @@ class Epayco extends PaymentModule
 
     public function hookDisplayPaymentTop()
     {
-        // echo 'hookDisplayPaymentTop';
+        $this->smarty->assign([
+            'epayco_payment_top' => Configuration::get('EPAYCO_PAYMENT_TOP'),
+        ]);
+
+        return $this->display(__FILE__, 'views/templates/hook/payment_top.tpl');
     }
 
     public function hookPaymentOptions($params)

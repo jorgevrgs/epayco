@@ -23,12 +23,6 @@
 *  International Registered Trademark & Property of PrestaShop SA
 *}
 
-<section>
-  <em>
-    <div class="alert alert-info" role="alert">
-      {l s='We receive credit cards franchises as Visa, MasterCard, Amex, Diners.' mod='epayco'}
-      {l s='Cash payment methods like Efecty, Gana, Servi, Punto Red.' mod='epayco'}
-      {l s='Alternative payment methods are Davivienda, Daviplata, Banco de Occidente Credencial, and PSE.' mod='epayco'}
-  </div>
-  </em>
-</section>
+{if isset($epayco_payment_top)}
+  {$epayco_payment_top nofilter}
+{/if}
