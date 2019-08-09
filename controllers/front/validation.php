@@ -72,7 +72,7 @@ class EpaycoValidationModuleFrontController extends ModuleFrontController
                 Tools::redirect(
                     $this->context->link->getModuleLink(
                         $this->module->name,
-                        'payment',
+                        'payments',
                         [
                             'order_id' => $order_id,
                             'secure_key' => $secure_key,

@@ -23,7 +23,7 @@
 *  @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 */
 
-class EpaycoPaymentModuleFrontController extends ModuleFrontController
+class EpaycoPaymentsModuleFrontController extends ModuleFrontController
 {
     public function initContent()
     {
@@ -83,11 +83,9 @@ class EpaycoPaymentModuleFrontController extends ModuleFrontController
                  */
                 $this->errors[] = $this->module->l('An error occured. Please contact the merchant to have more informations');
             }
-        } elseif (Tools::getIsset('order_id')) {
-            // TODO retry
         }
 
-        return $this->setTemplate('module:epayco/views/templates/front/payment.tpl');
+        $this->setTemplate('module:epayco/views/templates/front/payments.tpl');
     }
 
     public function getCurrency(Order $order) : string
@@ -129,9 +127,24 @@ class EpaycoPaymentModuleFrontController extends ModuleFrontController
         $return = [
             'external' => Configuration::get('EPAYCO_ONPAGE_CHECKOUT') ? 'false' : 'true',
             'key' => Configuration::get('EPAYCO_PUBLIC_KEY'), // Required
-            'amount' => number_format((float) $order->total_paid_tax_incl, Configuration::get('PS_PRICE_DISPLAY_PRECISION'), '.', ''), // Required
-            'tax' => number_format((float) $order->total_paid_tax_incl - $order->total_paid_tax_excl, Configuration::get('PS_PRICE_DISPLAY_PRECISION'), '.', ''),
-            'tax-base' => number_format((float) $order->total_paid_tax_excl, Configuration::get('PS_PRICE_DISPLAY_PRECISION'), '.', ''),
+            'amount' => number_format(
+                (float) $order->total_paid_tax_incl,
+                Configuration::get('PS_PRICE_DISPLAY_PRECISION'),
+                '.',
+                ''
+            ), // Required
+            'tax' => number_format(
+                (float) $order->total_paid_tax_incl - $order->total_paid_tax_excl,
+                Configuration::get('PS_PRICE_DISPLAY_PRECISION'),
+                '.',
+                ''
+            ),
+            'tax-base' => number_format(
+                (float) $order->total_paid_tax_excl,
+                Configuration::get('PS_PRICE_DISPLAY_PRECISION'),
+                '.',
+                ''
+            ),
             'name' => sprintf($this->module->l('Order #%06d'), $order->id), // Required
             'description' => sprintf($this->module->l('Order with reference %s'), $order->reference), // Required
             'currency' => $this->getCurrency($order), // Required
@@ -152,24 +165,14 @@ class EpaycoPaymentModuleFrontController extends ModuleFrontController
             'name-billing' => $customer->firstname.' '.$customer->lastname,
         ];
 
-        if (Configuration::get('EPAYCO_ONPAGE_CHECKOUT')) {
+        //if (Configuration::get('EPAYCO_ONPAGE_CHECKOUT')) {
             $return['response'] = $confirmation;
-        } else {
-            $return['acepted'] = $confirmation;
-            $return['rejected'] = $confirmation;
-            $return['pending'] = $confirmation;
-        }
+            //} else {
+            //$return['acepted'] = $confirmation;
+            //$return['rejected'] = $confirmation;
+            //$return['pending'] = $confirmation;
+            //}
 
         return $return;
-    }
-
-    /**
-     * @see parent::setMedia()
-     */
-    public function setMedia($isNewTheme = false)
-    {
-        parent::setMedia($isNewTheme);
-        $this->registerJavascript('epayco-checkout', 'https://checkout.epayco.co/checkout.js');
-        
     }
 }

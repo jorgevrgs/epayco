@@ -55,7 +55,7 @@ class Epayco extends PaymentModule
         $this->version = '0.0.1';
         $this->author = 'Jorge Vargas';
         $this->need_instance = 1;
-        $this->controllers = array('payment', 'validation', 'update');
+        $this->controllers = array('payments', 'validation', 'update');
         $this->bootstrap = true;
 
         parent::__construct();
@@ -180,7 +180,7 @@ class Epayco extends PaymentModule
         Configuration::deleteByName('EPAYCO_LIVE_MODE');
 
         //include(dirname(__FILE__).'/sql/uninstall.php');
-        $this->uninstallOrderState();
+        //$this->uninstallOrderState();
 
         return parent::uninstall();
     }
@@ -535,7 +535,7 @@ class Epayco extends PaymentModule
     /**
      * @param array $params
      */
-    public function processPayment(array $params)
+    public function processPayment(array $params = [])
     {
         $neededVars = [
             // Understand transaction response
