@@ -401,7 +401,11 @@ class Epayco extends PaymentModule
             $response = $this->getPaycoResponse(Tools::getValue('ref_payco'));
 
             if (!empty($response['data'])) {
-                $this->processPayment($response['data']);
+                try {
+                    $this->processPayment($response['data']);
+                } catch (PrestaShopException $e) {
+                    $this->_errors[] = $e->getMessage();
+                }
             } else {
                 $this->_errors[] = $this->l('Error when processing ref_payco response');
             }
@@ -684,7 +688,7 @@ class Epayco extends PaymentModule
     {
         $externalOption = new PaymentOption();
         $externalOption
-            //->setCallToActionText($this->l('ePayco'))
+            ->setCallToActionText($this->l('ePayco'))
             // TODO dynamic show title or not
             ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
             ->setInputs([
