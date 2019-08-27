@@ -292,7 +292,7 @@ class Epayco extends PaymentModule
                         'col' => 3,
                         'type' => 'text',
                         //'prefix' => '<i class="icon icon-envelope"></i>',
-                        'desc' => $this->l('Open "Integraciones" --> "Llaves API" and search "Llaves secretas"'),
+                        'desc' => $this->l('Open "Integraciones" --> "Llaves API" and search "Llaves secretas" --> P_KEY'),
                         'name' => 'EPAYCO_PRIVATE_KEY',
                         'label' => $this->l('Private Key'),
                     ),
@@ -572,7 +572,9 @@ class Epayco extends PaymentModule
         if (!count($epaycoVars)
         && count($params)) {
             $epaycoVars = $params;
-        } else {
+        }
+
+        if (!count($epaycoVars)) {
             throw new PrestaShopException($this->l('There are not exist vars needed to process the payment'));
         }
 
@@ -595,6 +597,17 @@ class Epayco extends PaymentModule
         ]);
 
         if ($signature != $epaycoVars['x_signature']) {
+            Logger::AddLog('ePaycoVars: '.json_encode($epaycoVars));
+            Logger::AddLog('signature params: '.json_encode([
+                $epaycoVars['x_cust_id_cliente'],
+                Configuration::get('EPAYCO_PRIVATE_KEY'),
+                $epaycoVars['x_ref_payco'],
+                $epaycoVars['x_transaction_id'],
+                $epaycoVars['x_amount'],
+                $epaycoVars['x_currency_code'],
+            ]));
+            Logger::AddLog('signature generated: '.$signature);
+            Logger::AddLog('signature received: '.$epaycoVars['x_signature']);
             throw new PrestaShopException(sprintf(
                 $this->l('Error when trying to validate signature local %s && received %s'),
                 $signature,
