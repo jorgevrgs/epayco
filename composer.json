@@ -1,4 +1,14 @@
 {
+  "name": "jorgevrgs/epayco",
+  "description": "ePayco module for PrestaShop 1.7.6+",
+  "version": "0.0.1",
+  "license": "EULA",
+  "authors": [
+    {
+      "name": "Jorge Vargas",
+      "email": "jorgevargasla@gmail.com"
+    }
+  ],
   "require" : {
     "epayco/epayco-php" : "dev-master"
   }
